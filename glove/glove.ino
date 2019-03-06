@@ -3,17 +3,18 @@ const int FLEX_PIN2 = A1; // Pin connected to voltage divider output
 const int FLEX_PIN3 = A2; // Pin connected to voltage divider output
 const int FLEX_PIN4 = A3; // Pin connected to voltage divider output
 const int FLEX_PIN5 = A4; // Pin connected to voltage divider output
-
+const int SIDE_TILT_PIN = 2;
+const int UP_TILT_PIN = 3;
 
 // Measure the voltage at 5V and the actual resistance of your
 // 47k resistor, and enter them below:
-const int VCC = 4.98; // Measured voltage of Ardunio 5V line
-const int R_DIV = 47500.0; // Measured resistance of 3.3k resistor
+const float VCC = 4.98; // Measured voltage of Ardunio 5V line
+const float R_DIV = 47500.0; // Measured resistance of 3.3k resistor
 
 // Upload the code, then try to adjust these values to more
 // accurately calculate bend degree.
-const int STRAIGHT_RESISTANCE [5] = {53523.38, 48154.52, 53945.73, 47407.23, 53314.31}; // Resistance when straight
-const int BEND_RESISTANCE [5] = {99305.13, 139394.22, 123000.0, 126666.67, 136562.5}; // Resistance at 90 deg
+const float STRAIGHT_RESISTANCE [5] = {53523.38, 48154.52, 53945.73, 47407.23, 53314.31}; // Resistance when straight
+const float BEND_RESISTANCE [5] = {99305.13, 139394.22, 123000.0, 126666.67, 136562.5}; // Resistance at 90 deg
 
 // Contains all 5 sensor value (each finger) for every letter of the alphabet
 int letterMatrix[26][5] = { 
@@ -45,6 +46,7 @@ int letterMatrix[26][5] = {
   {33.00, 12.00, 91.00, 85.00, 102.00},   //Z
 };
 
+
 int error[26][5] = {
   {15, 15,  15, 15, 15}, //A
   {15, 15,  15, 15, 15}, //B
@@ -73,10 +75,38 @@ int error[26][5] = {
   {15, 15,  15, 15, 15}, //Y
   {15, 15,  15, 15, 15}, //Z
 };
+
+// Side and up tilt
+// {LOW, HIGH} = up, {LOW, LOW} = down, {HIGH, LOW} = sideways
+int letterTilt[26][2] = { 
+  {LOW, HIGH}, //A
+  {LOW, HIGH}, //B
+  {LOW, HIGH}, //C
+  {LOW, HIGH}, //D
+  {LOW, HIGH}, //E
+  {LOW, HIGH}, //F
+  {HIGH, LOW}, //G
+  {HIGH, LOW}, //H
+  {LOW, HIGH}, //I
+  {LOW, HIGH}, //J TODO: not needed?
+  {LOW, HIGH}, //K
+  {LOW, HIGH}, //L
+  {LOW, HIGH}, //M
+  {LOW, HIGH}, //N
+  {LOW, HIGH}, //O
+  {LOW, LOW}, //P
+  {LOW, LOW}, //Q
+  {LOW, HIGH}, //R
+  {LOW, HIGH}, //S
+  {LOW, HIGH}, //T
+  {LOW, HIGH}, //U
+  {LOW, HIGH}, //V
+  {LOW, HIGH}, //W
+  {LOW, HIGH}, //X
+  {LOW, HIGH}, //Y
+  {LOW, HIGH}, //Z TODO: not needed?
+};
 //int letterMatrix[26][5] = allen[26][5];
-
-// TODO: File file = SD.open("gloveData", FILE_WRITE);
-
 
 void setup() 
 {
@@ -92,70 +122,72 @@ void setup()
   pinMode(FLEX_PIN5, INPUT);
   Serial.println("Welcome to G.L.O.V.E ASL translator. Please select one of the following options:");
   Serial.print("Calibrate glove (c) or use default values (d): ");
+  pinMode(2,INPUT);
+  digitalWrite(2, HIGH);
   //delay(200);
   
   while (!Serial.available());    // is a character available? 
   char rx_byte = Serial.read();
   Serial.println(rx_byte);
-  if(rx_byte == 'd'){
-    return;
-  } else {
+  if(rx_byte == 'c'){
     performCalibration();
+    Serial.println("letterMatrix **************");
     printMatrix(26, 5, letterMatrix);
+    Serial.println("error *********************");
     printMatrix(26, 5, error);
+    Serial.println();
   }
 }
 
 void loop() 
 {
-  Serial.print("{");
+  // Tilt switches
+  int handTiltSide = digitalRead(SIDE_TILT_PIN);
+  int handTiltUp = digitalRead(UP_TILT_PIN);
+
   int angle1 = readFinger(FLEX_PIN1,1);
-  Serial.print(", ");
   int angle2 = readFinger(FLEX_PIN2,2);
-  Serial.print(", ");
   int angle3 = readFinger(FLEX_PIN3,3);
-  Serial.print(", ");
   int angle4 = readFinger(FLEX_PIN4,4);
-  Serial.print(", ");
   int angle5 = readFinger(FLEX_PIN5,5);
-  Serial.print("}");
-  Serial.print(", ");
-  
-  Serial.println();
+  Serial.println("{" + String(angle1) + ", " + String(angle2) + ", " + String(angle3) + ", " + String(angle4) + ", " + String(angle5) + "}");
+
   delay(500);
-  String letter = "no letter found";
+  String message = "not found";
   for(int i = 0; i < 26; i++){
     int currDiff = 0;
-    int lastDiff = 1;
+    int lastDiff = 999999;
     int currAngle1 = letterMatrix[i][0];
     int currAngle2 = letterMatrix[i][1];
     int currAngle3 = letterMatrix[i][2];
     int currAngle4 = letterMatrix[i][3];
     int currAngle5 = letterMatrix[i][4];    //5 is the range. So value can be + or - 5 from actual to be correct, we can change this value to have a higher or lower tolerance
-    if(angle1<=currAngle1+error[i][0] && angle1>= currAngle1-error[i][0]){
-       currDiff += abs(currAngle1-angle1);
-       if(angle2<=currAngle2+error[i][1] && angle2>= currAngle2-error[i][1]){
-          currDiff += abs(currAngle2-angle2);
-          if(angle3<=currAngle3+error[i][2] && angle3>= currAngle3-error[i][2]){
-              currDiff += abs(currAngle3-angle3);
-              if(angle4<=currAngle4+error[i][3]&& angle4>= currAngle4-error[i][3]){
-                  currDiff += abs(currAngle4-angle4);
-                  if(angle5<=currAngle5+error[i][4] && angle5>= currAngle5-error[i][4]){
-                      currDiff += abs(currAngle5-angle5);
-                      char currLetter;
-                      if(currDiff < lastDiff){
-                        currLetter = i + 65;
-                        lastDiff = currDiff;
-                        Serial.println("\t changed letter");
-                      }
-                      message = "letter = " + String(currLetter);
-                      Serial.println(message);
-                      //Serial.println(currLetter);
-                          
-                  }
-             }
-          }
-       }
+    if(handTiltSide == letterTilt[i][0] && handTiltUp == letterTilt[i][1]){
+      if(angle1<=currAngle1+error[i][0] && angle1>= currAngle1-error[i][0]){
+         currDiff += abs(currAngle1-angle1);
+         if(angle2<=currAngle2+error[i][1] && angle2>= currAngle2-error[i][1]){
+            currDiff += abs(currAngle2-angle2);
+            if(angle3<=currAngle3+error[i][2] && angle3>= currAngle3-error[i][2]){
+                currDiff += abs(currAngle3-angle3);
+                if(angle4<=currAngle4+error[i][3]&& angle4>= currAngle4-error[i][3]){
+                    currDiff += abs(currAngle4-angle4);
+                    if(angle5<=currAngle5+error[i][4] && angle5>= currAngle5-error[i][4]){
+                        currDiff += abs(currAngle5-angle5);
+                        char currLetter;
+                        if(currDiff < lastDiff){
+                          currLetter = i + 65;
+                          lastDiff = currDiff;
+                          Serial.println("\t changed letter");
+                        }
+                        message = "letter = " + String(currLetter);
+                        Serial.println(message);
+                        //Serial.println(currLetter);
+                            
+                    }
+               }
+            }
+         }
+      }
     }
   }
 
@@ -163,13 +195,8 @@ void loop()
   Serial.println(message);
 }
 
-int getFingerPin (int number) {
-
-  
-}
-
 void performCalibration() {
-  int SAMPLES = 10;
+  int SAMPLES = 5;
   int FINGERS = 5;
   int LETTERS = 26;
 
@@ -183,21 +210,22 @@ void performCalibration() {
     Serial.print(String(curr));
     Serial.print("...");
     // Print 5 second count down to sampling
-    for (int j = 5; j > 0; j--) {
+    for (int j = 3; j > 0; j--) {
       Serial.print(String(j));
       Serial.print("...");
       delay(1000); // 1000ms = 1 second delay. 
     }
-    Serial.print("0... SAMPLING...");
+    Serial.println("0... SAMPLING...");
     
     int finger_samples [FINGERS][SAMPLES];
     int finger_error_delta [FINGERS];
+    
     for (int j = 0; j < SAMPLES; j++) {
       for (int k = 0; k < FINGERS; k++) {
         finger_samples[k][j] = readFingerByIndex(k);
       }
-      Serial.print(" sample taken...");
-      delay (500); // 500ms delay
+      Serial.println("\t Sample Taken");
+      delay (150); // 500ms delay
     }
     Serial.println(" DONE");
     
@@ -209,7 +237,10 @@ void performCalibration() {
       }
       int average = total / SAMPLES;
       letterMatrix[letter][finger] = average;
+      Serial.print(String(average));
+      Serial.print(", ");
     }
+    Serial.println();
 
     // Calculate error delta for each finger of every letter.
     for (int finger = 0; finger < FINGERS; finger++) {
@@ -228,8 +259,12 @@ void performCalibration() {
           }
         }
       } // End samples
-      error[letter][finger] = abs(maxVal - minVal);
-    } // End finger
+      int curError = abs(maxVal - minVal);
+      error[letter][finger] = curError;
+      Serial.print(String(curError));
+      Serial.print(", ");
+    }
+    Serial.println();
     
   }
 }
@@ -240,9 +275,11 @@ void printMatrix (int rows, int columns, int data[26][5]) {
     Serial.print("{");
     for (int column = 0; column < columns; column++) {
       Serial.print(String(data[row][column]));
-      Serial.print(", ");
+      if (column != columns - 1) {
+        Serial.print(", ");
+      }
     }
-    Serial.println("}, ");
+    Serial.println("},\t\t //" + String(65 + row));
   }
   Serial.println("}");
 }
@@ -250,32 +287,51 @@ void printMatrix (int rows, int columns, int data[26][5]) {
 // 0 based indexing from right most finger to left most finger. 
 // Finger 0 = thumb .. finger 4 = pinky.
 int readFingerByIndex (int finger) {
-  if (finger = 0) {
+  if (finger == 0) {
     return readFinger(FLEX_PIN1, 1);
-  } else if (finger = 1) {
+  } else if (finger == 1) {
     return readFinger(FLEX_PIN2, 2);
-  } else if (finger = 2) {
+  } else if (finger == 2) {
     return readFinger(FLEX_PIN3, 3);
-  } else if (finger = 3) {
+  } else if (finger == 3) {
     return readFinger(FLEX_PIN4, 4);
-  } else if (finger = 4) {
+  } else if (finger == 4) {
     return readFinger(FLEX_PIN5, 5);
   }
 }
 
+void waitTillHandFlat() {
+  int done = 0;
+  while (!done) {
+    
+  }
+}
+
+int checkErrorFinger (int letter, int finger, int reading) {
+  return (reading <= reading + error[letter][finger]) && (reading>= reading - error[letter][finger]);
+}
+
+int checkErrorHand (int letter, int reading) {
+  int FINGERS = 5;
+  for (int finger = 0; finger < FINGERS; finger++) {
+    if (!checkErrorFinger(letter, finger, reading)){
+      return 0;
+    }
+  }
+}
+
 int readFinger(const int FLEX_PIN, int fingerNumber){
-  //Serial.print("finger number " + String(fingerNumber));
-  int flexADC1 = analogRead(FLEX_PIN);
-  int flexV1 = flexADC1 * VCC / 1023.0;
-  int flexR1 = R_DIV * (VCC / flexV1 - 1.0);
+  //Serial.print("Value read from: " + String(fingerNumber));
+  float flexADC1 = analogRead(FLEX_PIN);
+  float flexV1 = flexADC1 * VCC / 1023.0;
+  float flexR1 = R_DIV * (VCC / flexV1 - 1.0);
   //Serial.print(" Resistance: " + String(flexR1) + " ohms");
 
   // Use the calculated resistance to estimate the sensor's
   // bend angle:
-  int angle1 = map(flexR1, STRAIGHT_RESISTANCE[fingerNumber - 1], BEND_RESISTANCE[fingerNumber - 1],
+  float angle1 = map(flexR1, STRAIGHT_RESISTANCE[fingerNumber - 1], BEND_RESISTANCE[fingerNumber - 1],
                    0, 90.0);
-  //Serial.print(" Bend: " + String(angle1) + " degrees");
-    //Serial.println();
-  Serial.print(String(angle1));
-return angle1;
+  //Serial.print("{" + String(angle1) + ", ");
+  //Serial.println(String(((int) angle1)) + "}");
+return (int) angle1;
 }
